@@ -1,0 +1,265 @@
+#!/usr/bin/env perl
+#
+# maint-music listoffiles
+#
+use Pod::Usage;
+use Getopt::Std;
+
+%opt = ();
+
+getopts('cdD:khnRSrv', \%opt);
+
+$Types_RE = '\.(mp3|m4a|wma)$';	        # a regular expression to match the music types
+
+$CleanUp   = $opt{'c'};
+$Help      = $opt{'h'};
+$KeepType  = $opt{'K'} || 'mp3';	# default type to keep
+$Keep	   = $opt{'k'};			# show the kept files
+$FindDupes = $opt{'d'};			# find duplicates
+$DelDupes  = $opt{'D'};
+$Recurse   = $opt{'r'};
+$Rename    = $opt{'R'};
+$NoSize    = $opt{'S'};
+$NoChange  = $opt{'n'};
+$Verbose   = $opt{'v'};
+
+pod2usage(-verbose => 2) if $Help;
+
+sub quote($) {
+   local($_) = shift;
+   return "'".$_."'" unless /'/;
+   return '"'.$_.'"' unless /"/;
+   s/"/\\"/g;
+   '"'.$_.'"';
+}
+
+sub cmd($@) {
+   my $s = sprintf "%5s %s", shift, quote(shift);
+   $s .= (sprintf " \\\n%5s %s", '', quote(shift)) if $#_ >= 0;
+   $s .= "\n";
+   print $s;
+   unless ($NoChange) {
+      my $status = system($s) >> 8;
+      warn "Error: $!\n" if $status > 0;
+   }
+}
+
+sub rm($)   { cmd 'rm', shift;	        }
+sub mv($$)  { cmd 'mv', shift, shift;   }
+sub keep($) { cmd 'ls', shift if $Keep; }
+
+# get_name filename
+#
+# return the basefilename without:
+#  - the extension,
+#  - the artist suffix, if any
+#  - without a trailing number
+
+sub get_name($) {
+   local($_) = shift;
+   my $orig = $_;
+   s{$Types_RE}{};		       # remove extension
+   if (s{(/([^/]+)/.*) - \2$}{$1} &&   # remove artist suffix
+      ($orig =~ /\.$KeepType$/)) {     # and if this is the type to keep
+      $rename{$orig} = $_.".$KeepType";# .. then rename it
+   }
+   s{ [1-5]$}{};		       # files ending in "xxx 1.mp3"  
+   $_;
+}
+
+
+sub scandir($) {
+   my @dirs = @_;
+   my $name;
+   my $level = 0;
+   while ($name = shift @dirs) {
+      if ( -f $name && $name =~ /$Types_RE/) {
+	 push @files, $name;
+      } elsif ( -d $name && ($level == 0 || $Recurse)) {
+	 if ($CleanUp && ($name =~ /^[_-]+|[_-]+$/) {
+	    ($newname = $name) =~ s/^[_-]+//;
+	    $newname =~ s/[_-]+$//;
+	    mv $name, $newname if length($newname) > 0 || $newname ne $name;
+	    $name = $newname;
+	 }
+	 print STDERR "--> $name\n" if $Verbose;
+	 if (opendir(DIR, $name)) {
+	    my @f = readdir(DIR);
+	    closedir (DIR);
+	    @f = grep !/^\./, @f;	  # remove all dotted names
+	    @f = map $name.'/'.$_, @f;	  # build complete paths
+
+	    @d = grep -d $_, @f;	  # extract the directories
+	    push @dirs, @d;		  # add to the list of directories
+	    $level++;			  # increment directory level
+
+	    @f = grep -f $_, @f;	  # now only files remain
+	    @f = grep /$Types_RE/, @f;    # now only the music files remain
+	    push @files, @f;		  # add the files to the list
+	 } else {
+	    warn "$name: opendir failed: $!\n"
+	 }
+      }
+   }
+}
+
+sub scanfile($) {
+   my $f = shift;
+   if (open(F, "<$f")) {		  # open the file
+      @files = (<F>);			  # read the whole file
+      close F;
+   } else {
+      die "$f: open failed: $!\n";
+   }
+   @files = grep chomp, @files;		  # remove trailing newlines
+}
+
+pod2usage(-verbose => 1) if $#ARGV < 0; # no args
+
+# scan the args.
+# If the arg is a file, read the file for a list of files
+# if the arg is a directory, read its contents, possibly recursively
+
+while ($_ = shift @ARGV) {	    # args can be directory or textfiles
+   if (-f $_) {
+      scanfile $_;
+   } elsif (-d $_) {		    # directory?
+      scandir $_;
+   } else {
+      die "File or directory does not exist: '$_'\n";
+   }
+}
+
+%paths = ();
+
+# this loop indexes all the files with a common prefix
+while ($_ = shift @files) {
+   $n = get_name $_;
+   push @{$paths{$n}}, $_;	    # keep list of files for a given name
+}
+
+foreach $n (sort keys %paths) {
+   my @f = @{$paths{$n}};
+
+   # have a list of files.
+   # keep the mp3, toss the others
+   # possibly rename the mp3
+
+   @keep = grep /\.$KeepType$/, @f; # keep one type
+
+   # there could be two or more mp3s with the same short name: eg. foo.mp3 and
+   # foo - artist.mp3.  Or, foo.mp3 and foo1.mp3
+   # The loop below finds the one that is to be renamed.
+
+   foreach $keep (@keep) {
+      if (my $new = $rename{$keep}) {  # is a renaming to occur?
+	 if (! -f $new) {	    # yes, does the target already exist?
+	    mv $keep, $new;	    # no, rename the file
+	 } else {		    # target already exists
+	    rm $keep;		    # remove the old name
+	    keep $new;		    # and keep the new
+	 }
+	 last;			    # exit the loop
+      }
+   }
+
+   if (@keep) {			    # only toss the others if there *IS* the KeepType 
+      @toss = grep !/\.$KeepType$/, @f;   # toss these
+      foreach $f (@toss) { rm $f; }
+
+      # if there is more than one file in @keep, then keep the shortest one
+      # also, make sure each file is the same size
+      @toss = sort { length($a) <=> length($b) } @keep;
+      $keep = shift @toss;
+      $keepsize = -s $keep;
+
+      keep $keep;		    # keep this one
+      foreach $toss (@toss) { 
+	if ($NoSize || $keepsize == -s $toss) {  # same size?
+	  rm $toss;		    # either we are ignoring sizes, or they are the same
+	} else {		    # sizes not the same
+	  keep $toss;
+	}
+      }
+
+   } else {			    # no keeptype, so keep them all
+      foreach $f (@f) { keep $f; }
+   }
+}
+
+exit;
+
+__END__
+=head1 NAME
+
+maint-music -- maintain the music filesystem
+
+=head1 SYNOPSIS
+
+maint-music [-dDnrS] [-K type] [ I<directory> | I<textfile> ]
+
+=head1 DESCRIPTION
+
+The B<maint-music> programm scans a text file for files, or recursively scans a
+directory, looking for MP3 or M4A files.  If finds duplicate file names, with
+different suffixes (for encodings, e.g., "foo.mp3" and "foo.m4a"), and removes
+the ".m4a" types, retaining the ".mp3".
+
+B<Maint-music> also renames any files for which the artist name is suffixed.
+For example, the path:
+
+   C<./Madonna/The Best Of Madonna/01 - Vogue - Madonna.mp3>
+
+would get renamed with the redundant C< - Madonna> removed.
+
+=head1 OPTIONS
+
+=over 10
+
+=item B<-c>
+
+Clean up filenames and directory names.  Specifically, remove leading and
+trailing "_" and "-" characters, which seem to show up a lot in iTunes repos.
+
+=item B<-d>
+
+Find duplicate music files.  Use B<-D> to delete them.
+
+=item B<-D>
+
+Delete duplicate music files (by name).  By default, keep the C<mp3> files.
+This can be changed with the B<-K> option.  Use B<-d> to find and report
+duplicate music files, but not delete them.
+
+=item B<-h>
+
+Show this help.
+
+=item B<-K> I<type>
+
+Keep music files of I<type>, where I<type> can be one of C<mp3>, C<m4a>, or
+C<wma>.  
+ 
+=item B<-n>
+
+Show the commands, but don't actually do them.
+
+=item B<-r>
+
+Recurse within the named directory.  Without this option, only 
+the top level files are scanned; subdirectories are ignored.
+
+=item B<-S>
+
+Ignore the size when deciding whether or not to keep a duplicate file.
+Normally, duplicates are removed only if their size matches exactly.
+
+=back
+
+=head1 AUTHOR
+
+Alan K. Stebbens <aks@stebbens.org>
+
+=cut
+
+
