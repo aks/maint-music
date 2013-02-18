@@ -2,14 +2,17 @@ maint-music
 ===========
 
 NAME
+
     maint-music -- maintain the music filesystem
 
 SYNOPSIS
+
     maint-music [-dDnrS] [-K type] *textfile*
 
     maint-music [-dDnrS] [-K type] *directory*
 
 DESCRIPTION
+
     The maint-music programm scans a text file for files, or recursively
     scans a directory, looking for MP3 or M4A files. It finds duplicate file
     names, with different encodings (e.g., "foo.mp3" and "foo.m4a"), and
@@ -23,6 +26,7 @@ DESCRIPTION
     would get renamed with the redundant " - Madonna" removed.
 
 OPTIONS
+
     -d        Find duplicate music files. Use -D to delete them.
 
     -D        Delete duplicate music files (by name). By default, keep the
@@ -44,5 +48,6 @@ OPTIONS
               size matches exactly.
 
 AUTHOR
+
     Alan K. Stebbens <aks@stebbens.org>
 
