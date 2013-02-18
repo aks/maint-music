@@ -76,7 +76,7 @@ sub scandir($) {
       if ( -f $name && $name =~ /$Types_RE/) {
 	 push @files, $name;
       } elsif ( -d $name && ($level == 0 || $Recurse)) {
-	 if ($CleanUp && ($name =~ /^[_-]+|[_-]+$/) {
+	 if ($CleanUp && ($name =~ /^[_-]+|[_-]+$/)) {
 	    ($newname = $name) =~ s/^[_-]+//;
 	    $newname =~ s/[_-]+$//;
 	    mv $name, $newname if length($newname) > 0 || $newname ne $name;

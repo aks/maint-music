@@ -7,25 +7,27 @@ NAME
 
 SYNOPSIS
 
-    maint-music [-dDnrS] [-K type] *textfile*
-
-    maint-music [-dDnrS] [-K type] *directory*
+    maint-music [-dDnrS] [-K type] [ *directory* | *textfile* ]
 
 DESCRIPTION
 
     The maint-music programm scans a text file for files, or recursively
-    scans a directory, looking for MP3 or M4A files. It finds duplicate file
-    names, with different encodings (e.g., "foo.mp3" and "foo.m4a"), and
-    removes the ".m4a" types, retaining the ".mp3".
+    scans a directory, looking for MP3 or M4A files. If finds duplicate file
+    names, with different suffixes (for encodings, e.g., "foo.mp3" and
+    "foo.m4a"), and removes the ".m4a" types, retaining the ".mp3".
 
-    Maint-music also renames any files for which the artist name is suffixed.
-    For example, the path 
+    Maint-music also renames any files for which the artist name is
+    suffixed. For example, the path:
 
-       "./Madonna/The Best Of Madonna/01 - Vogue - Madonna.mp3" 
+       C<./Madonna/The Best Of Madonna/01 - Vogue - Madonna.mp3>
 
     would get renamed with the redundant " - Madonna" removed.
 
 OPTIONS
+
+    -c        Clean up filenames and directory names. Specifically, remove
+              leading and trailing "_" and "-" characters, which seem to
+              show up a lot in iTunes repos.
 
     -d        Find duplicate music files. Use -D to delete them.
 
